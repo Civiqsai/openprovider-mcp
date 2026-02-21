@@ -13,14 +13,38 @@ load_dotenv(Path(__file__).parent / ".env")
 
 from openprovider import OpenproviderClient, OpenproviderError
 
-# --- Init ---
-username = os.environ.get("OPENPROVIDER_USERNAME")
-password = os.environ.get("OPENPROVIDER_PASSWORD")
-if not username or not password:
-    print("OPENPROVIDER_USERNAME and OPENPROVIDER_PASSWORD must be set in .env", file=sys.stderr)
+# --- Account discovery ---
+accounts: dict[str, OpenproviderClient] = {}
+
+# Scan for named accounts: OPENPROVIDER_{NAME}_USERNAME / _PASSWORD
+for key in sorted(os.environ):
+    if key.startswith("OPENPROVIDER_") and key.endswith("_USERNAME"):
+        name = key[len("OPENPROVIDER_"):-len("_USERNAME")].lower()
+        if not name:  # matches bare OPENPROVIDER_USERNAME — handled below
+            continue
+        pw_key = f"OPENPROVIDER_{name.upper()}_PASSWORD"
+        pw = os.environ.get(pw_key)
+        if pw:
+            accounts[name] = OpenproviderClient(os.environ[key], pw)
+
+# Fallback: legacy single-account format
+if not accounts:
+    username = os.environ.get("OPENPROVIDER_USERNAME")
+    password = os.environ.get("OPENPROVIDER_PASSWORD")
+    if username and password:
+        accounts["default"] = OpenproviderClient(username, password)
+
+if not accounts:
+    print(
+        "No Openprovider accounts configured. "
+        "Set OPENPROVIDER_{NAME}_USERNAME and OPENPROVIDER_{NAME}_PASSWORD in .env, "
+        "or use legacy OPENPROVIDER_USERNAME / OPENPROVIDER_PASSWORD.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
-client = OpenproviderClient(username, password)
+active_account = next(iter(accounts))
+client = accounts[active_account]
 
 mcp = FastMCP(
     "Openprovider",
@@ -30,7 +54,8 @@ mcp = FastMCP(
         "SSL certificates, WHOIS contacts, customers, invoices, and payments. "
         "IMPORTANT: Domain registration, renewal, transfer, and SSL orders cost money — "
         "always confirm with the operator before executing. "
-        "DNS zone updates (PUT) replace ALL records — always GET first, modify, then PUT back."
+        "DNS zone updates (PUT) replace ALL records — always GET first, modify, then PUT back. "
+        "When multiple accounts are configured, use openprovider_select_account to switch between them."
     ),
 )
 
@@ -41,6 +66,34 @@ def _err(e: OpenproviderError) -> str:
 
 def _ok(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+# ============================================================
+# Account Management
+# ============================================================
+
+@mcp.tool(annotations={"readOnlyHint": True})
+def openprovider_list_accounts() -> str:
+    """List configured Openprovider accounts and show which one is active."""
+    return json.dumps(
+        {"accounts": list(accounts.keys()), "active": active_account},
+        indent=2,
+    )
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "idempotentHint": True})
+def openprovider_select_account(account: str) -> str:
+    """Switch the active Openprovider account. All subsequent tool calls will use this account.
+    Use openprovider_list_accounts to see available accounts."""
+    global client, active_account
+    account = account.lower()
+    if account not in accounts:
+        return json.dumps({
+            "error": f"Unknown account '{account}'. Available: {list(accounts.keys())}",
+        })
+    active_account = account
+    client = accounts[active_account]
+    return json.dumps({"ok": True, "active": active_account})
 
 
 # ============================================================

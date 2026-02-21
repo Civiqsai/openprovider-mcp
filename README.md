@@ -31,14 +31,44 @@ chmod 600 .env
 claude mcp add -s user -t stdio openprovider -- "$(pwd)/.venv/bin/python" "$(pwd)/server.py"
 ```
 
+## Multiple accounts
+
+The server supports managing domains across multiple Openprovider reseller accounts.
+
+### Configuration
+
+Use the naming convention `OPENPROVIDER_{NAME}_USERNAME` / `OPENPROVIDER_{NAME}_PASSWORD` in your `.env`:
+
+```env
+OPENPROVIDER_MYCOMPANY_USERNAME=user1
+OPENPROVIDER_MYCOMPANY_PASSWORD=pass1
+
+OPENPROVIDER_OTHERACCOUNT_USERNAME=user2
+OPENPROVIDER_OTHERACCOUNT_PASSWORD=pass2
+```
+
+The legacy single-account format (`OPENPROVIDER_USERNAME` / `OPENPROVIDER_PASSWORD`) is still supported and creates an account named "default".
+
+### Switching accounts
+
+```
+openprovider_list_accounts        → shows available accounts and which is active
+openprovider_select_account("x")  → switches all subsequent calls to account "x"
+openprovider_whoami               → verify you're on the right account
+```
+
+The first account alphabetically is active at startup.
+
 ## Tools
 
-50 tools organized by category. All list endpoints support `limit`/`offset` pagination (default limit=100).
+52 tools organized by category. All list endpoints support `limit`/`offset` pagination (default limit=100).
 
-### Account
+### Account management
 
 | Tool | Description |
 |------|-------------|
+| `openprovider_list_accounts` | List configured accounts and show which is active |
+| `openprovider_select_account` | Switch the active account |
 | `openprovider_whoami` | Show reseller account info (company, balance, settings) |
 | `openprovider_get_reseller_by_id` | Get reseller details by ID |
 
@@ -180,7 +210,7 @@ Never migrate nameservers while DNSSEC is active with the old provider's keys.
 
 Two Python files:
 
-- **`server.py`** — FastMCP server with ~50 tool definitions. Each tool maps to one Openprovider API endpoint with JSON serialization and error handling.
+- **`server.py`** — FastMCP server with 52 tool definitions (50 API tools + 2 account management). Each tool maps to one Openprovider API endpoint with JSON serialization and error handling.
 - **`openprovider.py`** — HTTP client wrapping the Openprovider REST API. Handles authentication (username/password → Bearer token), automatic token refresh (48h TTL, refreshes 1h early), and 401 retry.
 
 The server runs via stdio transport — Claude Code spawns it as a subprocess and communicates over stdin/stdout.

@@ -42,19 +42,27 @@ echo "Installing dependencies..."
 
 # --- Credentials ---
 if [[ ! -f ".env" ]]; then
-    cp .env.example .env
     echo
-    echo "Created .env from .env.example."
-    read -rp "Enter your Openprovider username: " op_user
-    read -rsp "Enter your Openprovider password: " op_pass
+    echo "Setting up your first Openprovider account."
+    echo "You can add more accounts later by editing .env."
     echo
-    if [[ -n "$op_user" && -n "$op_pass" ]]; then
+    read -rp "Account name (short label, e.g. 'mycompany'): " acct_name
+    read -rp "Openprovider username: " op_user
+    read -rsp "Openprovider password: " op_pass
+    echo
+    if [[ -n "$acct_name" && -n "$op_user" && -n "$op_pass" ]]; then
+        acct_upper=$(echo "$acct_name" | tr '[:lower:]' '[:upper:]')
         cat > .env <<EOF
-OPENPROVIDER_USERNAME=$op_user
-OPENPROVIDER_PASSWORD=$op_pass
+OPENPROVIDER_${acct_upper}_USERNAME=$op_user
+OPENPROVIDER_${acct_upper}_PASSWORD=$op_pass
 EOF
-        echo "Credentials saved to .env"
+        echo "Credentials saved to .env (account: $acct_name)"
+        echo
+        echo "To add more accounts, append to .env:"
+        echo "  OPENPROVIDER_OTHER_USERNAME=..."
+        echo "  OPENPROVIDER_OTHER_PASSWORD=..."
     else
+        cp .env.example .env
         echo "Skipped — edit .env manually before use."
     fi
     chmod 600 .env
